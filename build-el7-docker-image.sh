@@ -20,7 +20,7 @@ if [[ $(id -u) -ne 0 ]] ; then
     exit 1
 fi
 
-# check if an image with the same distro + version combination is already registered with docker
+# check if an image with the same distro + build combination is already registered with docker
 if [[ $(docker images | awk '$1 == "'"${DIST}"'" && $2 == "'"${BUILD}"'"') ]] ; then
     echo "Error: docker image REPOSITORY:${DIST} BUILD:${BUILD} exists."
     exit 1
