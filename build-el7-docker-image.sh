@@ -1,9 +1,9 @@
 #!/bin/bash -e
 
-DIST="centos7"
-BUILD="$(date +%Y%m%d)"
-IMG_DIR="${PWD}/buildroot-${DIST}"
-REPO_DIR="${IMG_DIR}/etc/yum.repos.d"
+REPO="${1:-centos7}"
+TAG="$(date +%Y%m%d)"
+BUILDROOT_DIR="${PWD}/buildroot"
+YUM_CONF_DIR="${BUILDROOT_DIR}/etc/yum.repos.d"
 
 RPMS=(
     bind-utils
@@ -20,31 +20,31 @@ if [[ $(id -u) -ne 0 ]] ; then
     exit 1
 fi
 
-# check if an image with the same distro + build combination is already registered with docker
-if [[ $(docker images | awk '$1 == "'"${DIST}"'" && $2 == "'"${BUILD}"'"') ]] ; then
-    echo "Error: docker image REPOSITORY:${DIST} BUILD:${BUILD} exists."
+# check if an image with the same repo + tag combination is already registered with docker
+if [[ $(docker images | awk '$1 == "'"${REPO}"'" && $2 == "'"${TAG}"'"') ]] ; then
+    echo "Error: docker image REPOSITORY:${REPO} TAG:${TAG} exists."
     exit 1
 fi
 
 # setup directories
-rm -rf ${IMG_DIR}
-mkdir -p ${REPO_DIR}
+rm -rf ${BUILDROOT_DIR}
+mkdir -p ${YUM_CONF_DIR}
 
 # create devices
-mkdir ${IMG_DIR}/dev
-mknod -m 600 ${IMG_DIR}/dev/console c 5 1
-mknod -m 600 ${IMG_DIR}/dev/initctl p
-mknod -m 666 ${IMG_DIR}/dev/full c 1 7
-mknod -m 666 ${IMG_DIR}/dev/null c 1 3
-mknod -m 666 ${IMG_DIR}/dev/ptmx c 5 2
-mknod -m 666 ${IMG_DIR}/dev/random c 1 8
-mknod -m 666 ${IMG_DIR}/dev/tty c 5 0
-mknod -m 666 ${IMG_DIR}/dev/tty0 c 4 0
-mknod -m 666 ${IMG_DIR}/dev/urandom c 1 9
-mknod -m 666 ${IMG_DIR}/dev/zero c 1 5
+mkdir ${BUILDROOT_DIR}/dev
+mknod -m 600 ${BUILDROOT_DIR}/dev/console c 5 1
+mknod -m 600 ${BUILDROOT_DIR}/dev/initctl p
+mknod -m 666 ${BUILDROOT_DIR}/dev/full c 1 7
+mknod -m 666 ${BUILDROOT_DIR}/dev/null c 1 3
+mknod -m 666 ${BUILDROOT_DIR}/dev/ptmx c 5 2
+mknod -m 666 ${BUILDROOT_DIR}/dev/random c 1 8
+mknod -m 666 ${BUILDROOT_DIR}/dev/tty c 5 0
+mknod -m 666 ${BUILDROOT_DIR}/dev/tty0 c 4 0
+mknod -m 666 ${BUILDROOT_DIR}/dev/urandom c 1 9
+mknod -m 666 ${BUILDROOT_DIR}/dev/zero c 1 5
 
 # create yum configuration
-cat > ${IMG_DIR}/etc/yum.conf << __YUM_CONF__
+cat > ${BUILDROOT_DIR}/etc/yum.conf << __YUM_CONF__
 [main]
 cachedir=/var/cache/yum/
 keepcache=0
@@ -57,7 +57,7 @@ tsflags=nodocs
 __YUM_CONF__
 
 # create build yum repo file
-cat > ${REPO_DIR}/build.repo << __BUILD_REPO__
+cat > ${YUM_CONF_DIR}/build.repo << __BUILD_REPO__
 [base]
 name=CentOS-7 - Base
 baseurl=https://mirrors.kernel.org/centos/7/os/x86_64/
@@ -75,31 +75,31 @@ gpgkey=https://mirrors.kernel.org/centos/RPM-GPG-KEY-CentOS-7
 __BUILD_REPO__
 
 # install packages
-yum --installroot=${IMG_DIR} install ${RPMS[@]} --config=${IMG_DIR}/etc/yum.conf --assumeyes
+yum --installroot=${BUILDROOT_DIR} install ${RPMS[@]} --config=${BUILDROOT_DIR}/etc/yum.conf --assumeyes
 
 # enable centos fasttrack repo
-sed -i 's/enabled=0/enabled=1/g' ${IMG_DIR}/etc/yum.repos.d/CentOS-fasttrack.repo
+sed -i 's/enabled=0/enabled=1/g' ${BUILDROOT_DIR}/etc/yum.repos.d/CentOS-fasttrack.repo
 
 # configure network
-cat > ${IMG_DIR}/etc/sysconfig/network << __NET_CONF__
+cat > ${BUILDROOT_DIR}/etc/sysconfig/network << __NET_CONF__
 NETWORKING=yes
 __NET_CONF__
 
 # configure timezone
-chroot ${IMG_DIR} ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime
+chroot ${BUILDROOT_DIR} ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime
 
 # configure systemd
-chroot ${IMG_DIR} systemctl mask dev-mqueue.mount
-chroot ${IMG_DIR} systemctl mask dev-hugepages.mount
-chroot ${IMG_DIR} systemctl mask systemd-remount-fs.service
-chroot ${IMG_DIR} systemctl mask sys-kernel-config.mount
-chroot ${IMG_DIR} systemctl mask sys-kernel-debug.mount
-chroot ${IMG_DIR} systemctl mask sys-fs-fuse-connections.mount
-chroot ${IMG_DIR} systemctl mask display-manager.service
-chroot ${IMG_DIR} systemctl disable graphical.target
-chroot ${IMG_DIR} systemctl enable multi-user.target
+chroot ${BUILDROOT_DIR} systemctl mask dev-mqueue.mount
+chroot ${BUILDROOT_DIR} systemctl mask dev-hugepages.mount
+chroot ${BUILDROOT_DIR} systemctl mask systemd-remount-fs.service
+chroot ${BUILDROOT_DIR} systemctl mask sys-kernel-config.mount
+chroot ${BUILDROOT_DIR} systemctl mask sys-kernel-debug.mount
+chroot ${BUILDROOT_DIR} systemctl mask sys-fs-fuse-connections.mount
+chroot ${BUILDROOT_DIR} systemctl mask display-manager.service
+chroot ${BUILDROOT_DIR} systemctl disable graphical.target
+chroot ${BUILDROOT_DIR} systemctl enable multi-user.target
 
-cat > ${IMG_DIR}/etc/systemd/system/dbus.service << __DBUS_CONF__
+cat > ${BUILDROOT_DIR}/etc/systemd/system/dbus.service << __DBUS_CONF__
 [Unit]
 Description=D-Bus System Message Bus
 Requires=dbus.socket
@@ -119,52 +119,57 @@ __DBUS_CONF__
 
 # delete yum build repo and clean
 rm -f ${REPO_DIR}/build.repo
-yum --installroot=${IMG_DIR} clean all
-rm -rf ${IMG_DIR}/var/cache/yum/*
+yum --installroot=${BUILDROOT_DIR} clean all
+rm -rf ${BUILDROOT_DIR}/var/cache/yum/*
 
 # delete ldconfig
-rm -rf ${IMG_DIR}/etc/ld.so.cache
-rm -rf ${IMG_DIR}/var/cache/ldconfig/*
+rm -rf ${BUILDROOT_DIR}/etc/ld.so.cache
+rm -rf ${BUILDROOT_DIR}/var/cache/ldconfig/*
 
 # delete logs
-find ${IMG_DIR}/var/log -type f -delete
+find ${BUILDROOT_DIR}/var/log -type f -delete
 
 # reduce size of locale files
-chroot ${IMG_DIR} localedef --delete-from-archive $(localedef --list-archive | grep -v "en_US" | xargs)
-mv ${IMG_DIR}/usr/lib/locale/locale-archive ${IMG_DIR}/usr/lib/locale/locale-archive.tmpl
-chroot ${IMG_DIR} /usr/sbin/build-locale-archive
-:>${IMG_DIR}/usr/lib/locale/locale-archive.tmpl
-find ${IMG_DIR}/usr/{{lib,share}/locale,bin/localedef} -type f | grep -v "en_US" | xargs rm
+chroot ${BUILDROOT_DIR} localedef --delete-from-archive $(localedef --list-archive | grep -v "en_US" | xargs)
+mv ${BUILDROOT_DIR}/usr/lib/locale/locale-archive ${BUILDROOT_DIR}/usr/lib/locale/locale-archive.tmpl
+chroot ${BUILDROOT_DIR} /usr/sbin/build-locale-archive
+:>${BUILDROOT_DIR}/usr/lib/locale/locale-archive.tmpl
+find ${BUILDROOT_DIR}/usr/{{lib,share}/locale,bin/localedef} -type f | grep -v "en_US" | xargs rm
 
 # delete non-utf character sets
-find ${IMG_DIR}/usr/lib64/gconv/ -type f ! -name "UTF*" -delete
+find ${BUILDROOT_DIR}/usr/lib64/gconv/ -type f ! -name "UTF*" -delete
 
 # delete docs
-find ${IMG_DIR}/usr/share/{man,doc,info,gnome} -type f -delete
+find ${BUILDROOT_DIR}/usr/share/{man,doc,info,gnome} -type f -delete
 
 # delete i18n
-find ${IMG_DIR}/usr/share/i18n -type f -delete
+find ${BUILDROOT_DIR}/usr/share/i18n -type f -delete
 
 # delete cracklib
-find ${IMG_DIR}/usr/share/cracklib -type f -delete
+find ${BUILDROOT_DIR}/usr/share/cracklib -type f -delete
 
 # delete timezones
-find ${IMG_DIR}/usr/share/zoneinfo -type f \( ! -name "Etc" ! -name "UTC" \) -delete
+find ${BUILDROOT_DIR}/usr/share/zoneinfo -type f \( ! -name "Etc" ! -name "UTC" \) -delete
 
 # delete /boot
-rm -rf ${IMG_DIR}/boot
+rm -rf ${BUILDROOT_DIR}/boot
 
 # delete sln
-rm -f ${IMG_DIR}/sbin/sln
+rm -f ${BUILDROOT_DIR}/sbin/sln
 
-# inject build number
-echo ${BUILD} > ${IMG_DIR}/.build 
+# inject build aka tag number
+echo ${TAG} > ${BUILDROOT_DIR}/.build
 
 # create and register image with docker
-tar --numeric-owner --acls --xattrs --selinux -C ${IMG_DIR} -c . | docker import - ${DIST} ${BUILD}
+tar --numeric-owner --acls --xattrs --selinux -C ${BUILDROOT_DIR} -c . | docker import - ${REPO}
 
 # run simple test
-docker run -i -t ${DIST}:${BUILD} echo "${DIST}:${BUILD} built successfully."
+docker run -i -t ${REPO} echo "${REPO} built successfully."
+
+# tag image
+IMAGE_ID="$(docker images | grep ${REPO} | awk '{print $3}' | head -1)"
+docker tag ${IMAGE_ID} ${REPO}:${TAG}
+docker tag ${IMAGE_ID} ${REPO}:latest
 
 echo "Completed in ${SECONDS} seconds."
 
