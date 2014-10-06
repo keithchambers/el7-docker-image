@@ -118,7 +118,7 @@ PermissionsStartOnly=true
 __DBUS_CONF__
 
 # delete yum build repo and clean
-rm -f ${REPO_DIR}/build.repo
+rm -f ${YUM_CONF_DIR}/build.repo
 yum --installroot=${BUILDROOT_DIR} clean all
 rm -rf ${BUILDROOT_DIR}/var/cache/yum/*
 
