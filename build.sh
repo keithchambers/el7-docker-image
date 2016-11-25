@@ -14,8 +14,8 @@ RPMS=(
     initscripts
 )
 
-# requires root effective permissions
-if [[ $(id -u) -ne 0 ]] ; then
+# check if running with root permissions
+if [[ $(id -u) -ne 0 ]]; then
     echo "Error: ${0} must execute as root."
     exit 1
 fi
