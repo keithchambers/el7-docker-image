@@ -21,7 +21,7 @@ if [[ $(id -u) -ne 0 ]]; then
 fi
 
 # check if an image with the same repo + tag combination is already registered with docker
-if [[ $(docker images | awk '$1 == "'"${DOCKER_IMAGE_REPO}"'" && $2 == "'"${DOCKER_IMAGE_TAG}"'"') ]] ; then
+if [[ $(docker images | awk '$1 == "'"${DOCKER_IMAGE_REPO}"'" && $2 == "'"${DOCKER_IMAGE_TAG}"'"') ]]; then
     echo "Error: docker image REPOSITORY:${DOCKER_IMAGE_REPO} TAG:${DOCKER_IMAGE_TAG} exists."
     exit 1
 fi
@@ -158,7 +158,7 @@ rm -rf "${BUILDROOT_PATH}/boot"
 rm -f "${BUILDROOT_PATH}/sbin/sln"
 
 # inject build aka tag number
-echo "${TAG}" > "${BUILDROOT_PATH}/.build"
+echo "${DOCKER_IMAGE_TAG}" > "${BUILDROOT_PATH}/.build"
 
 # create and register image with docker
 tar --numeric-owner --acls --xattrs --selinux -C "${BUILDROOT_PATH}" -c . | docker import - "${DOCKER_IMAGE_REPO}"
